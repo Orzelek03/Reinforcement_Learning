@@ -11,6 +11,8 @@ export async function sendStepToAPI(payload: RLStepPayload): Promise<RLActionRes
         });
 
         if(!response.ok){
+            const errorBody = await response.text();
+            console.error("Szczegóły błędu 422 z FASTAPI", errorBody);
             throw new Error(`Bład HTTP: ${response.status}`);
         }
         const data: RLActionResponse = await response.json();

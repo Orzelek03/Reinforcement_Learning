@@ -1,5 +1,6 @@
 import { act, useState } from "react";
 import AimTrainer from './components/AimTrainer'
+import OtherGames from "./components/OtherGames";
 
 function App() {
   const [difficulty, setDifficulty] = useState<number>(1);
@@ -45,7 +46,8 @@ function App() {
            
             <div className="relative group w-full aspect-[4/3]">
               <div className="bt-div"></div>
-              <button className="bt-game w-full h-full flex items-center justify-center text-center  leading-tight">
+              <button className="bt-game w-full h-full flex items-center justify-center text-center  leading-tight"
+              onClick={() => setActivegame('memory')}>
                 Pamięć
               </button>
             </div>
@@ -53,7 +55,8 @@ function App() {
            
             <div className="relative group w-full aspect-[4/3]">
               <div className="bt-div"></div>
-              <button className="bt-game w-full h-full flex items-center justify-center text-center  leading-tight">
+              <button className="bt-game w-full h-full flex items-center justify-center text-center  leading-tight"
+              onClick={() => setActivegame('logical')}>
                 Logika
               </button>
             </div>
@@ -66,15 +69,9 @@ function App() {
           {activegame === 'reaction' ? (
             <AimTrainer />
           ):(
-          <div className="text-center ">
-            <h2 className="text-2xl font-semibold text-slate-300 mb-2 font-anta">
-              Wybierz grę
-            </h2>
-            <p className="text-slate-500 mb-10 font-anta">
-              Oczekiwanie na wyniki...
-            </p>
-          </div>
+          <OtherGames/>
           )}
+          
           </div>
         {/* Right column for agent comments */}
         <div className="main-side-div">

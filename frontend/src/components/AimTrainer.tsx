@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import type { RLStepPayload, RLActionResponse } from "../types/rl";
+import { sendStepToAPI } from "../api/rlClient";
 
 type GameState = "waiting" | "playing" | "finished";
 
@@ -9,9 +10,10 @@ export default function ReactionGame() {
   const [targetPos, setTargetPos] = useState({ x: 50, y: 50 });
 
   // Parametry środowiska (FastAPI)
-  const targetSize = 50; // piksele
-  const targetLifespan = 1200; // czas do zniknięcia (ms)
-  
+  const [targetSize, setTargetSize] = useState(50); // piksele
+  const [targetLifespan, setTargetLifespan] = useState(1200); // czas do zniknięcia (ms)
+
+  const sessionIdRef = useRef<string>("");
   const isPlayingRef = useRef(false);
   const timerRef = useRef<number | null>(null);
 
@@ -23,17 +25,53 @@ export default function ReactionGame() {
     }
   };
 
-  
+  const processRLStep = async (reward: number) => {
+    const total = score.hits + score.misses;
+    const accuracy = total > 0 ? score.hits / total : 0.5;
+
+    const payload: RLStepPayload = {
+      session_id: sessionIdRef.current,
+      game_id: "aim_trainer",
+      state: {
+        accuracy: accuracy,
+        step_count: total,
+      },
+      reward: reward,
+    };
+    const response = await sendStepToAPI(payload);
+
+    if (response) {
+      setTargetSize((prev) => {
+        const newSize = Math.round(
+          prev * response.action.difficulty_modifier_1,
+        );
+        return Math.max(20, Math.min(newSize, 120)); //20px-120px -> Limit
+      });
+
+      setTargetLifespan((prev) => {
+        const newLifespan = Math.round(
+          prev * response.action.difficulty_modifier_2,
+        );
+        return Math.max(400, Math.min(newLifespan, 2000)); //400ms-2000ms -> Limit
+      });
+
+      console.log(
+        `Model RL zaaplikował : Rozmiar x${response.action.difficulty_modifier_1}, Czas x${response.action.difficulty_modifier_2}`,
+      );
+    }
+  };
+
   function handleMiss() {
     if (!isPlayingRef.current) return;
     setScore((prev) => ({ ...prev, misses: prev.misses + 1 }));
+    processRLStep(-1);
     // TODO: Wysłanie ujemnej nagrody do FastAPI
     spawnTarget();
   }
 
   function spawnTarget() {
     if (!isPlayingRef.current) return;
-    
+
     // Losowanie współrzędnych (0-90, żeby kółko nie wyszło poza ramkę)
     const newX = Math.floor(Math.random() * 90);
     const newY = Math.floor(Math.random() * 90);
@@ -41,14 +79,16 @@ export default function ReactionGame() {
 
     clearTargetTimer();
 
-    // Zwróć uwagę na window.setTimeout
     timerRef.current = window.setTimeout(() => {
       handleMiss();
     }, targetLifespan);
   }
 
   const startGame = () => {
+    sessionIdRef.current = crypto.randomUUID();
     setScore({ hits: 0, misses: 0 });
+    setTargetSize(50);
+    setTargetLifespan(1200);
     setGameState("playing");
     isPlayingRef.current = true;
     spawnTarget();
@@ -64,7 +104,7 @@ export default function ReactionGame() {
     e.stopPropagation(); // Blokuje "przebicie" kliknięcia w tło
     if (!isPlayingRef.current) return;
     setScore((prev) => ({ ...prev, hits: prev.hits + 1 }));
-    // TODO: Wysłanie dodatniej nagrody do FastAPI
+    processRLStep(1);
     spawnTarget();
   };
 
@@ -86,10 +126,17 @@ export default function ReactionGame() {
       <div className="flex justify-between w-full max-w-2xl mb-4 text-slate-300 font-anta">
         <h2 className="text-2xl font-bold">Trening celności</h2>
         {gameState === "playing" && (
-          <div className="flex gap-4 text-lg">
-            <span className="text-green-400">Trafienia : {score.hits}</span>
-            <span className="text-red-400">Pudła : {score.misses}</span>
-            <span className="text-blue-400">Celność : {accuracy}%</span>
+          <div className="flex flex-col items-end gap-2 text-lg">
+            <div className="flex gap-4 text-lg">
+              <span className="text-green-400">Trafienia : {score.hits}</span>
+              <span className="text-red-400">Pudła : {score.misses}</span>
+              <span className="text-blue-400">Celność : {accuracy}%</span>
+            </div>
+            {/*Diagnoza*/}
+            <div className="flex gap-4 text-sm text-yellow-400 bg-slate-800 px-3 py-1 rounded border border-yellow-700/50">
+              <span>Rozmiar: {targetSize}px</span>
+              <span>Czas : {targetLifespan}</span>
+            </div>
           </div>
         )}
       </div>
@@ -109,7 +156,7 @@ export default function ReactionGame() {
             </button>
           </div>
         )}
-        
+
         {/* Cel - kółko */}
         {gameState === "playing" && (
           <button
@@ -124,7 +171,7 @@ export default function ReactionGame() {
             className="bg-red-500 rounded-full hover:bg-red-400 transition-colors shadow-lg active:scale-95 cursor-crosshair"
           />
         )}
-        
+
         {/* Ekran końcowy */}
         {gameState === "finished" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-800/90 text-slate-200 font-anta z-10">
